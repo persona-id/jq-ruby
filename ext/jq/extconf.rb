@@ -19,26 +19,23 @@ def have_system_jq?
     have_header('jv.h')
 end
 
+# Detect the version of libjq we'll actually link against
+#
+# IMPORTANT: We can ONLY trust pkg-config here. The jq binary in PATH could be
+# from a completely different installation than the libjq library we're linking
+# against. For example:
+#   - /usr/local/bin/jq could be version 1.8.1
+#   - /usr/lib/libjq.so could be version 1.6
+#   - We'd link against 1.6 but report 1.8.1 (wrong!)
+#
+# pkg-config tells us about the actual library that will be linked.
+#
+# If pkg-config is not available:
+#   - We cannot reliably determine the version
+#   - For miniportile builds, we know the version (we build it ourselves)
+#   - For system libraries, we warn the user
 def check_jq_version
-  # Try pkg-config first
   version = `pkg-config --modversion libjq 2>/dev/null`.strip
-
-  # If pkg-config doesn't work, try jq binary
-  if version.empty?
-    jq_output = `jq --version 2>/dev/null`.strip
-    version = jq_output[/jq[- ](\d+\.\d+(?:\.\d+)?)/, 1]
-  end
-
-  # If we still don't have a version, try to parse from jq.h
-  if version.empty? || version.nil?
-    jq_h_path = find_header('jq.h')
-    if jq_h_path
-      jq_h_content = File.read(jq_h_path)
-      if jq_h_content =~ /JQ_VERSION\s+"([^"]+)"/
-        version = $1
-      end
-    end
-  end
 
   return nil if version.nil? || version.empty?
 
@@ -69,6 +66,7 @@ else
     require 'mini_portile2'
     require_relative 'recipes/jq_recipe'
 
+    $building_from_source = true
     recipe = JQRecipe.new
     recipe.cook
     recipe.activate
@@ -106,15 +104,20 @@ def verify_linked_jq_version
 end
 
 # Check jq version for thread safety
+# Note: We can only reliably detect the version via pkg-config, which tells us
+# about the actual library we'll link against. The jq binary in PATH could be
+# from a completely different installation.
 version = check_jq_version
+version_source = version ? "pkg-config" : "unknown"
+
 if version
   version_str = version.join('.')
-  puts "Found jq version: #{version_str}"
+  puts "Found libjq version #{version_str} (via #{version_source})"
 
   unless version_meets_minimum?(version, MINIMUM_JQ_VERSION)
     abort <<~ERROR
       ================================================================================
-      ERROR: jq version #{version_str} is too old.
+      ERROR: libjq version #{version_str} is too old.
 
       This gem requires jq #{MINIMUM_JQ_VERSION} or newer for thread-safe operation.
       jq 1.7+ includes a critical fix (PR #2546) for multi-threaded environments.
@@ -129,18 +132,24 @@ if version
       ================================================================================
     ERROR
   end
-
-  # Verify we can actually link and run against libjq
-  unless verify_linked_jq_version
-    abort "Failed to link against libjq or runtime test failed. Please check your jq installation."
-  end
 else
-  puts "WARNING: Could not detect jq version. Proceeding with build, but jq 1.7+ is required for thread safety."
-
-  # Still try to verify linking works
-  unless verify_linked_jq_version
-    abort "Failed to link against libjq or runtime test failed. Please check your jq installation."
+  # We couldn't detect the version (no pkg-config available)
+  # This is common when using manual library installations
+  if use_system_libraries
+    puts "WARNING: Could not detect libjq version (pkg-config not available)."
+    puts "         Make sure you have libjq 1.7.0 or newer installed."
+    puts "         This gem requires jq 1.7+ for thread-safe operation."
+  else
+    # If we're using miniportile, we know we're building 1.8.1
+    if $building_from_source && defined?(JQRecipe)
+      puts "Building jq #{JQRecipe::JQ_VERSION} from source (pkg-config not available)"
+    end
   end
+end
+
+# Verify we can actually link and run against libjq
+unless verify_linked_jq_version
+  abort "Failed to link against libjq. Please check your jq installation."
 end
 
 # Add compiler flags

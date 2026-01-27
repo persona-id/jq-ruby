@@ -23,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `JQ::ParseError` - Invalid JSON input
 - System library detection with miniportile fallback
   - Automatic detection of system jq library via pkg-config
-  - Falls back to building jq 1.7.1 from source if needed
+  - Falls back to building jq 1.8.1 from source if needed
   - Support for `--use-system-libraries` flag
 - Comprehensive test suite with >95% coverage
   - Core functionality tests
