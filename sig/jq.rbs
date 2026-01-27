@@ -1,0 +1,48 @@
+# frozen_string_literal: true
+
+module JQ
+  VERSION: String
+
+  # Apply a jq filter to JSON input
+  #
+  # @param json The JSON input as a string
+  # @param filter The jq filter expression
+  # @param raw_output Return raw strings without JSON encoding (jq -r)
+  # @param compact_output Output compact JSON (default: true). Set to false for pretty output
+  # @param sort_keys Sort object keys (jq -S)
+  # @param multiple_outputs Return array of all results instead of first only
+  # @return The filtered result as JSON string, or array of strings if multiple_outputs
+  def self.filter: (String json, String filter,
+                   ?raw_output: bool,
+                   ?compact_output: bool,
+                   ?sort_keys: bool,
+                   ?multiple_outputs: false) -> String
+                 | (String json, String filter,
+                   ?raw_output: bool,
+                   ?compact_output: bool,
+                   ?sort_keys: bool,
+                   multiple_outputs: true) -> Array[String]
+
+  # Validate a jq filter expression
+  #
+  # @param filter The jq filter expression to validate
+  # @return true if valid
+  # @raise [CompileError] if invalid
+  def self.validate_filter!: (String filter) -> true
+
+  # Base exception class for all jq-related errors
+  class Error < StandardError
+  end
+
+  # Raised when a jq filter fails to compile
+  class CompileError < Error
+  end
+
+  # Raised when a jq filter execution fails at runtime
+  class RuntimeError < Error
+  end
+
+  # Raised when JSON input is invalid
+  class ParseError < Error
+  end
+end

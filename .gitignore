@@ -1,0 +1,49 @@
+/.bundle/
+/.yardoc
+/_yardoc/
+/coverage/
+/doc/
+/pkg/
+/spec/reports/
+/tmp/
+
+# rspec failure tracking
+spec/examples.txt
+
+# Compiled extensions
+*.bundle
+*.so
+*.o
+*.a
+*.log
+
+# Compiled extension outputs
+/lib/jq/jq_ext.bundle
+/lib/jq/jq_ext.so
+/lib/jq/jq_ext.dll
+
+# Build artifacts
+/ext/jq/*.o
+/ext/jq/*.so
+/ext/jq/*.bundle
+/ext/jq/Makefile
+/ext/jq/mkmf.log
+/ext/jq/tmp/
+
+# miniportile
+/ext/jq/ports/
+/ext/jq/tmp/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Gem files
+*.gem
