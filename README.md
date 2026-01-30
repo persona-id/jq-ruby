@@ -22,30 +22,7 @@ Or install it yourself:
 gem install jq
 ```
 
-### Build Options
-
-By default, the gem will try to use your system's jq library. If not found, it will compile jq from source using miniportile.
-
-To force using system libraries:
-
-```bash
-gem install jq -- --use-system-libraries
-# OR
-JQ_USE_SYSTEM_LIBRARIES=1 gem install jq
-```
-
-To install jq system-wide:
-
-```bash
-# macOS
-brew install jq
-
-# Ubuntu/Debian
-apt-get install libjq-dev
-
-# Fedora/RHEL
-yum install jq-devel
-```
+**Note:** This gem bundles jq 1.8.1 and builds it from source automatically during installation. No system dependencies are required.
 
 ## Usage
 
@@ -215,14 +192,6 @@ After checking out the repo, run:
 
 ```bash
 bundle install
-bundle exec rake compile
-bundle exec rake spec
-```
-
-To test with system libraries:
-
-```bash
-JQ_USE_SYSTEM_LIBRARIES=1 bundle install
 bundle exec rake compile
 bundle exec rake spec
 ```
