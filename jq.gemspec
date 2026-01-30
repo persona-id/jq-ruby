@@ -3,8 +3,8 @@
 Gem::Specification.new do |spec|
   spec.name = "jq"
   spec.version = "1.0.0"
-  spec.authors = ["Samuel Giddins"]
-  spec.email = ["segiddins@segiddins.me"]
+  spec.authors = ["Persona Identities"]
+  spec.email = ["rubygems@withpersona.com"]
 
   spec.summary = "Ruby bindings for jq, the JSON processor"
   spec.description = "A minimal, security-focused Ruby gem that wraps the jq C library for JSON transformation"
