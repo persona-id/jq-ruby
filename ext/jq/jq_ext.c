@@ -10,6 +10,13 @@ VALUE rb_eJQCompileError;
 VALUE rb_eJQRuntimeError;
 VALUE rb_eJQParseError;
 
+// Forward declarations for static helper functions
+static VALUE jv_to_json_string(jv value, int raw, int compact, int sort);
+static void raise_jq_error(jv error_value, VALUE exception_class);
+static VALUE rb_jq_filter_impl(const char *json_str, const char *filter_str,
+                                int raw_output, int compact_output,
+                                int sort_keys, int multiple_outputs);
+
 /**
  * Convert a jv value to a Ruby JSON string
  *
@@ -70,7 +77,9 @@ static void raise_jq_error(jv error_value, VALUE exception_class) {
     VALUE rb_msg = rb_str_new_cstr(msg);
     jv_free(error_value);  // Free the error message
 
-    rb_raise(exception_class, "%s", StringValueCStr(rb_msg));
+    // Store C string before rb_raise (StringValueCStr can raise if encoding issues occur)
+    const char *msg_cstr = StringValueCStr(rb_msg);
+    rb_raise(exception_class, "%s", msg_cstr);
 }
 
 /**
@@ -106,8 +115,10 @@ static VALUE rb_jq_filter_impl(const char *json_str, const char *filter_str,
             const char *error_msg = jv_string_value(error);
             VALUE rb_error_msg = rb_str_new_cstr(error_msg);
             jv_free(error);
+            // Store C string before cleanup (StringValueCStr can raise)
+            const char *error_cstr = StringValueCStr(rb_error_msg);
             jq_teardown(&jq);
-            rb_raise(rb_eJQCompileError, "%s", StringValueCStr(rb_error_msg));
+            rb_raise(rb_eJQCompileError, "%s", error_cstr);
         }
 
         jv_free(error);
@@ -340,8 +351,10 @@ VALUE rb_jq_validate_filter(VALUE self, VALUE filter) {
             const char *error_msg = jv_string_value(error);
             VALUE rb_error_msg = rb_str_new_cstr(error_msg);
             jv_free(error);
+            // Store C string before cleanup (StringValueCStr can raise)
+            const char *error_cstr = StringValueCStr(rb_error_msg);
             jq_teardown(&jq);
-            rb_raise(rb_eJQCompileError, "%s", StringValueCStr(rb_error_msg));
+            rb_raise(rb_eJQCompileError, "%s", error_cstr);
         }
 
         jv_free(error);
