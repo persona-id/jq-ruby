@@ -15,7 +15,8 @@ static VALUE jv_to_json_string(jv value, int raw, int compact, int sort);
 static void raise_jq_error(jv error_value, VALUE exception_class);
 static VALUE rb_jq_filter_impl(const char *json_str, const char *filter_str,
                                 int raw_output, int compact_output,
-                                int sort_keys, int multiple_outputs);
+                                int sort_keys, int multiple_outputs,
+                                int sandbox);
 
 /**
  * Convert a jv value to a Ruby JSON string
@@ -91,11 +92,13 @@ static void raise_jq_error(jv error_value, VALUE exception_class) {
  * @param compact_output If true, output compact JSON (jq -c)
  * @param sort_keys If true, sort object keys (jq -S)
  * @param multiple_outputs If true, return array of all results
+ * @param sandbox If true, enable sandbox mode (blocks env/include/import)
  * @return Ruby string or array of strings
  */
 static VALUE rb_jq_filter_impl(const char *json_str, const char *filter_str,
                                 int raw_output, int compact_output,
-                                int sort_keys, int multiple_outputs) {
+                                int sort_keys, int multiple_outputs,
+                                int sandbox) {
     jq_state *jq = NULL;
     jv input = jv_invalid();
     VALUE results = Qnil;
@@ -105,6 +108,10 @@ static VALUE rb_jq_filter_impl(const char *json_str, const char *filter_str,
     jq = jq_init();
     if (!jq) {
         rb_raise(rb_eJQError, "Failed to initialize jq");
+    }
+
+    if (sandbox) {
+        jq_set_sandbox(jq);
     }
 
     // Compile filter
@@ -202,6 +209,7 @@ static VALUE rb_jq_filter_impl(const char *json_str, const char *filter_str,
  * [:compact_output (Boolean)] Output compact JSON on a single line. Default: true (set to false for pretty output)
  * [:sort_keys (Boolean)] Sort object keys alphabetically (equivalent to jq -S). Default: false
  * [:multiple_outputs (Boolean)] Return array of all results instead of just the first. Default: false
+ * [:sandbox (Boolean)] Enable sandbox mode to block access to environment variables and file imports. Default: true
  *
  * === Returns
  *
@@ -259,9 +267,10 @@ VALUE rb_jq_filter(int argc, VALUE *argv, VALUE self) {
     const char *json_cstr = StringValueCStr(json_str);
     const char *filter_cstr = StringValueCStr(filter_str);
 
-    // Parse options (default to compact output)
+    // Parse options (default to compact output, sandbox enabled)
     int raw_output = 0, compact_output = 1;
     int sort_keys = 0, multiple_outputs = 0;
+    int sandbox = 1;
 
     if (!NIL_P(opts)) {
         Check_Type(opts, T_HASH);
@@ -278,11 +287,15 @@ VALUE rb_jq_filter(int argc, VALUE *argv, VALUE self) {
 
         opt = rb_hash_aref(opts, ID2SYM(rb_intern("multiple_outputs")));
         if (RTEST(opt)) multiple_outputs = 1;
+
+        opt = rb_hash_aref(opts, ID2SYM(rb_intern("sandbox")));
+        if (!NIL_P(opt)) sandbox = RTEST(opt) ? 1 : 0;
     }
 
     return rb_jq_filter_impl(json_cstr, filter_cstr,
                              raw_output, compact_output,
-                             sort_keys, multiple_outputs);
+                             sort_keys, multiple_outputs,
+                             sandbox);
 }
 
 /*
@@ -343,6 +356,8 @@ VALUE rb_jq_validate_filter(VALUE self, VALUE filter) {
     if (!jq) {
         rb_raise(rb_eJQError, "Failed to initialize jq");
     }
+
+    jq_set_sandbox(jq);
 
     if (!jq_compile(jq, filter_cstr)) {
         jv error = jq_get_error_message(jq);
