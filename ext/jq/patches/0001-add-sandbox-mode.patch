@@ -1,0 +1,156 @@
+diff -ruN a/src/builtin.c b/src/builtin.c
+--- a/src/builtin.c	2026-02-20 23:06:20
++++ b/src/builtin.c	2026-02-20 23:09:28
+@@ -1229,6 +1229,11 @@
+ static jv f_env(jq_state *jq, jv input) {
+   jv_free(input);
+   jv env = jv_object();
++
++  // A sandboxed filter doesn't have access to environment variables,
++  // so in such a case we return the empty object without using environ.
++  if (jq_is_sandbox(jq)) return env;
++
+   const char *var, *val;
+   for (char **e = environ; *e != NULL; e++) {
+     var = e[0];
+diff -ruN a/src/compile.c b/src/compile.c
+--- a/src/compile.c	2026-02-20 23:06:20
++++ b/src/compile.c	2026-02-20 23:09:16
+@@ -1346,7 +1346,7 @@
+   return errors;
+ }
+ 
+-int block_compile(block b, struct bytecode** out, struct locfile* lf, jv args) {
++int block_compile(block b, struct bytecode** out, struct locfile* lf, jv args, int is_sandbox) {
+   struct bytecode* bc = jv_mem_alloc(sizeof(struct bytecode));
+   bc->parent = 0;
+   bc->nclosures = 0;
+@@ -1356,7 +1356,12 @@
+   bc->globals->cfunctions = jv_mem_calloc(MAX(ncfunc, 1), sizeof(struct cfunction));
+   bc->globals->cfunc_names = jv_array();
+   bc->debuginfo = jv_object_set(jv_object(), jv_string("name"), jv_null());
+-  jv env = jv_invalid();
++
++  // When sandboxed, we don't want to expose environment vars to the program,
++  // so we create an empty object which is already valid. This prevents a
++  // later step from creating a populated `$ENV` object, because that step
++  // only does so if the current value for `env` is invalid.
++  jv env = is_sandbox ? jv_object() : jv_invalid();
+   int nerrors = compile(bc, b, lf, args, &env);
+   jv_free(args);
+   jv_free(env);
+diff -ruN a/src/compile.h b/src/compile.h
+--- a/src/compile.h	2026-02-20 23:06:20
++++ b/src/compile.h	2026-02-20 23:09:07
+@@ -79,7 +79,7 @@
+ jv block_take_imports(block* body);
+ jv block_list_funcs(block body, int omit_underscores);
+ 
+-int block_compile(block, struct bytecode**, struct locfile*, jv);
++int block_compile(block, struct bytecode**, struct locfile*, jv, int is_sandbox);
+ 
+ void block_free(block);
+ 
+diff -ruN a/src/execute.c b/src/execute.c
+--- a/src/execute.c	2026-02-20 23:06:20
++++ b/src/execute.c	2026-02-20 23:08:55
+@@ -41,6 +41,7 @@
+   unsigned next_label;
+ 
+   int halted;
++  int sandbox;
+   jv exit_code;
+   jv error_message;
+ 
+@@ -1059,6 +1060,7 @@
+   jq->curr_frame = 0;
+   jq->error = jv_null();
+ 
++  jq->sandbox = 0;
+   jq->halted = 0;
+   jq->exit_code = jv_invalid();
+   jq->error_message = jv_invalid();
+@@ -1237,7 +1239,7 @@
+   if (nerrors == 0) {
+     nerrors = builtins_bind(jq, &program);
+     if (nerrors == 0) {
+-      nerrors = block_compile(program, &jq->bc, locations, args2obj(args));
++      nerrors = block_compile(program, &jq->bc, locations, args2obj(args), jq_is_sandbox(jq));
+     }
+   } else
+     jv_free(args);
+@@ -1312,6 +1314,14 @@
+ void jq_get_stderr_cb(jq_state *jq, jq_msg_cb *cb, void **data) {
+   *cb = jq->stderr_cb;
+   *data = jq->stderr_cb_data;
++}
++
++void jq_set_sandbox(jq_state *jq) {
++  jq->sandbox = 1;
++}
++
++int jq_is_sandbox(jq_state *jq) {
++  return jq->sandbox;
+ }
+ 
+ void
+diff -ruN a/src/jq.h b/src/jq.h
+--- a/src/jq.h	2026-02-20 23:06:20
++++ b/src/jq.h	2026-02-20 23:08:28
+@@ -30,6 +30,8 @@
+ jv jq_next(jq_state *);
+ void jq_teardown(jq_state **);
+ 
++void jq_set_sandbox(jq_state *);
++int jq_is_sandbox(jq_state *);
+ void jq_halt(jq_state *, jv, jv);
+ int jq_halted(jq_state *);
+ jv jq_get_exit_code(jq_state *);
+diff -ruN a/src/linker.c b/src/linker.c
+--- a/src/linker.c	2026-02-20 23:06:20
++++ b/src/linker.c	2026-02-20 23:09:45
+@@ -251,6 +251,15 @@
+     i--;
+     jv dep = jv_array_get(jv_copy(deps), i);
+ 
++    // Loading dependencies is not allowed when running in sandbox mode.
++    if (jq_is_sandbox(jq)) {
++      jq_report_error(jq, jv_string("jq: error: Loading dependencies (with import or include) is not allowed in sandbox mode"));
++      jv_free(deps);
++      jv_free(jq_origin);
++      jv_free(lib_origin);
++      return 1;
++    }
++
+     const char *as_str = NULL;
+     int is_data = jv_get_kind(jv_object_get(jv_copy(dep), jv_string("is_data"))) == JV_KIND_TRUE;
+     int raw = 0;
+@@ -420,16 +429,18 @@
+     return 1;
+   }
+ 
+-  jv home = get_home();
+-  if (jv_is_valid(home)) {
+-    /* Import ~/.jq as a library named "" found in $HOME or %USERPROFILE% */
+-    block import = gen_import_meta(gen_import("", NULL, 0),
+-        gen_const(JV_OBJECT(
+-            jv_string("optional"), jv_true(),
+-            jv_string("search"), home)));
+-    program = BLOCK(import, program);
+-  } else {    // silently ignore if home dir not determined
+-    jv_free(home);
++  if (!jq_is_sandbox(jq)) {
++    jv home = get_home();
++    if (jv_is_valid(home)) {
++      /* Import ~/.jq as a library named "" found in $HOME or %USERPROFILE% */
++      block import = gen_import_meta(gen_import("", NULL, 0),
++          gen_const(JV_OBJECT(
++              jv_string("optional"), jv_true(),
++              jv_string("search"), home)));
++      program = BLOCK(import, program);
++    } else {    // silently ignore if home dir not determined
++      jv_free(home);
++    }
+   }
+ 
+   nerrors = process_dependencies(jq, jq_get_jq_origin(jq), jq_get_prog_origin(jq), &program, &lib_state);

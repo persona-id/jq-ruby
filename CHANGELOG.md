@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-02-20
+
+### Added
+
+- Sandbox mode for `JQ.filter` (enabled by default) that blocks access to
+  environment variables (`env`, `$ENV`) and file imports (`include`, `import`)
+  - New `:sandbox` option on `JQ.filter` (default: `true`). Pass `sandbox: false`
+    to allow environment variable access and file imports.
+  - `JQ.validate_filter!` always runs in sandbox mode
+- Patch system for bundled jq source via `mini_portile2` `patch_files`
+
+### Changed
+
+- **Breaking**: `env` and `$ENV` now return empty objects by default. Pass
+  `sandbox: false` to `JQ.filter` to restore access to environment variables.
+- **Breaking**: `include` and `import` statements now raise `JQ::Error` by
+  default.
+
 ## [1.0.0] - 2026-01-26
 
 ### Added
@@ -46,4 +64,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Filter expressions cannot execute system commands (safe by design)
 - Tested with large inputs, deeply nested structures, and malicious filters
 
+[1.1.0]: https://github.com/persona-id/jq-ruby/releases/tag/v1.1.0
 [1.0.0]: https://github.com/persona-id/jq-ruby/releases/tag/v1.0.0

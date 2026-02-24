@@ -2,7 +2,7 @@
 
 Gem::Specification.new do |spec|
   spec.name = "jq"
-  spec.version = "1.0.0"
+  spec.version = "1.1.0"
   spec.authors = ["Persona Identities"]
   spec.email = ["rubygems@withpersona.com"]
 

@@ -15,6 +15,7 @@ class JQRecipe < MiniPortile
       url: "https://github.com/jqlang/jq/releases/download/jq-#{JQ_VERSION}/jq-#{JQ_VERSION}.tar.gz",
       sha256: JQ_SHA256
     }    
+    self.patch_files = Dir[File.join(__dir__, 'patches', '*.patch')].sort
     self.configure_options += [
       # "--enable-shared",
       "--enable-static",
