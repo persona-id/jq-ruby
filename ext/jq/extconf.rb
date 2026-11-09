@@ -12,7 +12,7 @@ class JQRecipe < MiniPortile
   def initialize
     super('jq', JQ_VERSION)
     self.files << {
-      url: "https://github.com/jqlang/jq/releases/download/jq-#{JQ_VERSION}/jq-#{JQ_VERSION}.tar.gz",
+      url: "file://#{File.expand_path("vendor/jq-#{JQ_VERSION}.tar.gz", __dir__)}",
       sha256: JQ_SHA256
     }    
     self.patch_files = Dir[File.join(__dir__, 'patches', '*.patch')].sort
